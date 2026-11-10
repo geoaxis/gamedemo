@@ -1,0 +1,21 @@
+{
+  "name": "mera-gaon",
+  "version": "1.0.0",
+  "description": "A 3D exploration game set in a village in rural Punjab, Pakistan",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "shots": "node tools/screenshots.mjs"
+  },
+  "dependencies": {
+    "@fontsource/noto-nastaliq-urdu": "^5.3.0",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.0",
+    "vite": "^8.3.7"
+  }
+}
