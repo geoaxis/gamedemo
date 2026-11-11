@@ -1,4 +1,5 @@
-import { HELP, UI } from '../data/strings.js';
+import { HELP, HELP_TOUCH, UI } from '../data/strings.js';
+import { isTouch } from '../systems/input.js';
 
 // On-screen text: place names, the "press E" prompt, speech, short notices and the clock.
 // Everything is Urdu with an English line beneath that the T key hides.
@@ -15,7 +16,9 @@ export class Hud {
     this.promptKey = null;
     this.subs = true;
 
-    this.el.help.innerHTML = HELP.map(([k, ur, en]) => `<tr><td><kbd>${k}</kbd></td><td class="ur">${ur}</td><td class="en">${en}</td></tr>`).join('');
+    if (isTouch) document.body.classList.add('touch');
+    this.set($('#rotate'), UI.rotate);
+    this.el.help.innerHTML = (isTouch ? HELP_TOUCH : HELP).map(([k, ur, en]) => `<tr><td><kbd>${k}</kbd></td><td class="ur">${ur}</td><td class="en">${en}</td></tr>`).join('');
     this.el.keys.innerHTML = HELP.slice(3).map(([k, , en]) => `<span><kbd>${k}</kbd> ${en.split(' (')[0]}</span>`).join('');
   }
 
@@ -28,6 +31,13 @@ export class Hud {
       this.el.hud.classList.remove('hidden');
       onStart();
     }, { once: true });
+  }
+
+  // on-screen buttons (phones) press keys through the input
+  bindButtons(input) {
+    const press = (code) => (e) => { e.preventDefault(); input.tap(code); };
+    for (const b of document.querySelectorAll('[data-key]')) b.addEventListener('pointerdown', press(b.dataset.key));
+    this.el.prompt.addEventListener('pointerdown', press('KeyE'));
   }
 
   set(el, t) {

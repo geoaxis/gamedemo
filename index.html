@@ -2,7 +2,10 @@
 <html lang="ur">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#14532d" />
     <link rel="icon" href="data:," />
     <title>میرا گاؤں — Mera Gaon</title>
   </head>
@@ -20,6 +23,13 @@
       </div>
       <div id="toast"><div class="ur"></div><div class="en"></div></div>
       <div id="keys"></div>
+      <div id="stick"><div></div></div>
+      <div id="touchbar">
+        <button data-key="KeyN" aria-label="Skip time ahead">⏩</button>
+        <button data-key="KeyT" aria-label="English subtitles">EN</button>
+        <button data-key="KeyM" aria-label="Sound">🔊</button>
+      </div>
+      <button id="horn" data-key="KeyH" aria-label="Horn">📯</button>
     </div>
 
     <div id="title">
@@ -28,6 +38,7 @@
         <p class="sub ur">چک نمبر ۴۷ — پنجاب کے ایک گاؤں کی سیر</p>
         <p class="sub en">A walk through a village in Punjab</p>
         <button id="start" disabled><span class="ur">ٹھہریں…</span></button>
+        <p id="rotate"><span class="ur"></span><span class="en"></span></p>
         <table id="help"></table>
       </div>
     </div>

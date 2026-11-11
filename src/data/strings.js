@@ -199,6 +199,17 @@ export const HELP = [
   ['M', 'آواز', 'Sound on or off'],
 ];
 
+export const HELP_TOUCH = [
+  ['🕹️', 'بائیں انگوٹھے سے چلیں', 'Left thumb: move (push far to run)'],
+  ['👆', 'دائیں طرف انگلی پھیر کر دیکھیں', 'Drag on the right: look around'],
+  ['🤏', 'دو انگلیوں سے قریب یا دور', 'Pinch: zoom in or out'],
+  ['✋', 'پیلے اشارے کو چھوئیں', 'Tap the yellow prompt: talk or use'],
+  ['⏩', 'وقت آگے بڑھائیں', 'Skip time ahead'],
+  ['EN', 'انگریزی ترجمہ', 'English subtitles on or off'],
+  ['🔊', 'آواز', 'Sound on or off'],
+];
+
 export const UI = {
   start: t('شروع کریں', 'Start'),
+  rotate: t('بہتر نظارے کے لیے فون کو آڑا کر لیں', 'Turn your phone sideways for a better view'),
 };

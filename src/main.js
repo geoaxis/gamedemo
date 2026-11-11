@@ -18,7 +18,7 @@ import { scatterTrees, buildTrees } from './world/trees.js';
 import { buildSky } from './world/sky.js';
 import { spawnAnimal, updateAnimals, animals, egret } from './models/animals.js';
 import { Traffic } from './models/truck.js';
-import { Input } from './systems/input.js';
+import { Input, isTouch } from './systems/input.js';
 import { Player } from './systems/player.js';
 import { FollowCam } from './systems/camera.js';
 import { Tractor } from './systems/vehicle.js';
@@ -30,7 +30,7 @@ import { makeRng } from './util/rng.js';
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouch ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 
@@ -39,6 +39,7 @@ const camera = new THREE.PerspectiveCamera(58, 1, 0.3, 3200);
 const resize = () => {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   camera.aspect = window.innerWidth / window.innerHeight;
+  camera.fov = camera.aspect < 1 ? 72 : 58; // a phone held upright needs a taller view
   camera.updateProjectionMatrix();
 };
 window.addEventListener('resize', resize);
@@ -47,6 +48,7 @@ resize();
 const hud = new Hud();
 const input = new Input(canvas);
 const sound = new Sound();
+hud.bindButtons(input);
 
 async function boot() {
   await loadUrduFont();
@@ -208,6 +210,7 @@ async function boot() {
     focus.x = player.x; focus.y = player.y; focus.z = player.z;
     cam.update(dt, input, focus, { driving: player.mode === 'drive', driveYaw: tractor.yaw });
     sky.update(dt, focus, camera);
+    document.body.classList.toggle('driving', player.mode === 'drive');
     tractor.model.lamp.intensity = player.mode === 'drive' ? sky.night * 120 : 0;
 
     // HUD
@@ -232,7 +235,13 @@ async function boot() {
     input.endFrame();
   }
 
-  const start = () => { started = true; input.enabled = true; sound.start(); };
+  const start = () => {
+    started = true; input.enabled = true; sound.start();
+    // phones: go full screen and hold landscape where the browser allows it
+    if (isTouch && !params.has('auto')) {
+      document.documentElement.requestFullscreen?.()?.then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
+    }
+  };
   hud.ready(start);
   if (params.has('auto')) document.getElementById('start').click();
 

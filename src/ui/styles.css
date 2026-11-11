@@ -99,7 +99,7 @@ kbd {
 #title {
   position: fixed; inset: 0; display: grid; place-items: center; padding: 16px;
   background: linear-gradient(rgba(20, 60, 34, 0.25), rgba(40, 26, 12, 0.7));
-  transition: opacity 0.8s; overflow: auto;
+  transition: opacity 0.8s; overflow: auto; touch-action: pan-y;
 }
 #title.gone { opacity: 0; pointer-events: none; }
 #title .card {
@@ -126,3 +126,86 @@ kbd {
 #help td { padding: 0 10px; text-align: start; vertical-align: middle; }
 #help .ur { font-size: 15px; line-height: 2; text-align: right; }
 #help .en { font-size: 13px; }
+
+/* ---- phones and tablets ---- */
+html, body {
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#game { touch-action: none; }
+
+#stick, #touchbar, #horn, #rotate { display: none; }
+
+body.touch #keys { display: none; }
+body.touch #prompt {
+  pointer-events: auto; cursor: pointer;
+  bottom: calc(18% + env(safe-area-inset-bottom)); left: auto; right: max(18px, env(safe-area-inset-right)); transform: none;
+  padding: 4px 22px 8px; border: 2px solid var(--mustard);
+}
+body.touch #prompt:not(.show) { pointer-events: none; }
+body.touch #prompt kbd { display: none; }
+body.touch #prompt .ur { font-size: 22px; }
+
+#stick {
+  position: absolute; width: 132px; height: 132px; margin: -66px 0 0 -66px;
+  border-radius: 50%; border: 2px solid rgba(246, 236, 214, 0.5); background: rgba(28, 20, 12, 0.25);
+}
+#stick.on { display: block; }
+#stick div {
+  position: absolute; left: 36px; top: 36px; width: 56px; height: 56px;
+  border-radius: 50%; background: rgba(241, 196, 15, 0.85); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+body.touch #touchbar {
+  display: flex; gap: 8px; pointer-events: auto;
+  position: absolute; top: max(14px, env(safe-area-inset-top)); left: max(14px, env(safe-area-inset-left));
+}
+#touchbar button, #horn {
+  width: 44px; height: 44px; border: 1px solid rgba(246, 236, 214, 0.4); border-radius: 12px;
+  background: var(--shade); color: var(--paper); font: 700 15px system-ui, sans-serif;
+  touch-action: manipulation;
+}
+#touchbar button:active, #horn:active { background: var(--mustard); color: var(--ink); }
+body.touch.driving #horn {
+  display: block; pointer-events: auto; position: absolute;
+  right: max(18px, env(safe-area-inset-right)); bottom: calc(32% + env(safe-area-inset-bottom));
+  width: 60px; height: 60px; border-radius: 50%; font-size: 26px;
+}
+
+@media (orientation: portrait) {
+  body.touch #rotate { display: flex; flex-direction: column; margin: 0 0 10px; color: var(--mustard); }
+  #rotate .ur { font-size: 16px; }
+  #rotate .en { font-size: 12px; }
+}
+
+/* small screens: shrink the big Urdu text */
+@media (max-width: 700px), (max-height: 500px) {
+  #title .card { padding: 8px 18px 14px; }
+  #title h1 { font-size: 44px; line-height: 1.8; }
+  #title .sub.ur { font-size: 16px; }
+  #start { margin: 4px 0 8px; }
+  #help .ur { font-size: 13px; line-height: 1.8; }
+  #help .en { font-size: 11px; }
+  #area .ur { font-size: 32px; }
+  #area .en { font-size: 12px; }
+  #clock { top: max(10px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); }
+  #clock .ur { font-size: 16px; line-height: 2.1; }
+  #clock .en { font-size: 10px; margin-top: 0; }
+  #area .en { margin-top: 0; }
+  #dialogue { bottom: 3%; padding: 4px 16px 10px; width: min(620px, 70vw); }
+  #dialogue .name { font-size: 14px; }
+  #dialogue .line { font-size: 19px; line-height: 2; }
+  #dialogue .en { font-size: 12px; }
+  #toast .ur { font-size: 17px; }
+  #prompt .ur, body.touch #prompt .ur { font-size: 17px; }
+}
+@media (max-height: 500px) {
+  body.touch #prompt { bottom: calc(40% + env(safe-area-inset-bottom)); }
+  body.touch.driving #horn { bottom: calc(62% + env(safe-area-inset-bottom)); }
+}
+@media (orientation: portrait) and (max-width: 700px) {
+  #dialogue { width: 92vw; bottom: calc(30% + env(safe-area-inset-bottom)); }
+}
