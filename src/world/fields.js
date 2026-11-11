@@ -4,6 +4,7 @@ import { Builder, box, tbox, tintGradient, tint } from '../models/build.js';
 import { FIELD_BLOCKS } from '../data/layout.js';
 import { addTree } from './trees.js';
 import { makeRng } from '../util/rng.js';
+import { windify } from '../systems/wind.js';
 
 // Late-February crops: young green wheat, mustard in flower, standing sugarcane,
 // berseem fodder, a few ploughed plots and one being flooded from the tube well.
@@ -12,7 +13,7 @@ const CROPS = {
   wheat: { soil: '#5e9a35', spacing: 1.05, weight: 46 },
   mustard: { soil: '#9aa832', spacing: 1.1, weight: 16 },
   sugarcane: { soil: '#6f6a3c', spacing: 1.25, weight: 14 },
-  berseem: { soil: '#3f8a2f', spacing: 0.95, weight: 12 },
+  berseem: { soil: '#3f8a2f', spacing: 1.05, weight: 12 },
   ploughed: { soil: '#9b7d58', spacing: 0, weight: 9 },
   flooded: { soil: '#7f8672', spacing: 2.2, weight: 0 },
 };
@@ -44,7 +45,14 @@ function tuftGeometry(crop) {
       parts.push(tintGradient(strip(lean(l, i * 2.1 + 0.7, 0.16)), '#4c8a2e', '#7fb64a'));
     }
   } else if (crop === 'berseem') {
-    parts.push(tintGradient(strip(new THREE.SphereGeometry(0.6, 5, 2, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.5, 1)), '#2f7526', '#58a83a'));
+    // clover: a low carpet of small trefoil leaves on thin stalks
+    const rng = makeRng(99);
+    for (let i = 0; i < 16; i++) {
+      const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 0.6, y = rng.range(0.08, 0.32), s = rng.range(0.09, 0.14);
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const leaf = new THREE.CircleGeometry(s, 3).rotateX(-Math.PI / 2 + rng.range(-0.5, 0.5)).rotateY(rng() * 6.28).translate(x, y, z);
+      parts.push(tint(strip(leaf), rng.pick(['#3f8a2f', '#4f9a38', '#367d28', '#5aa640'])));
+    }
   } else if (crop === 'flooded') {
     const g = new THREE.ConeGeometry(0.1, 0.4, 3, 1, true).translate(0, 0.25, 0);
     parts.push(tintGradient(strip(g), '#4c8a2e', '#8cc152'));
@@ -90,22 +98,8 @@ export function buildFields(scene) {
   const landMesh = land.build({ cast: false });
   group.add(landMesh);
 
-  // Crop material: flat-shaded vertex colours, bending gently in the breeze.
-  const wind = { value: 0 };
-  const cropMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
-  cropMat.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = wind;
-    shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader.replace(
-      '#include <begin_vertex>',
-      `#include <begin_vertex>
-      #ifdef USE_INSTANCING
-        float ph = instanceMatrix[3].x * 0.31 + instanceMatrix[3].z * 0.23;
-        float bend = transformed.y * transformed.y;
-        transformed.x += sin(uTime * 1.7 + ph) * 0.07 * bend;
-        transformed.z += cos(uTime * 1.3 + ph * 1.3) * 0.05 * bend;
-      #endif`,
-    );
-  };
+  // Crop material: flat-shaded vertex colours, bending with the shared breeze.
+  const cropMat = windify(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide }), { height: 1, amt: 0.2, flutter: 0.015, push: 0.5 });
 
   const geos = {};
   const dummy = new THREE.Object3D();
@@ -140,5 +134,5 @@ export function buildFields(scene) {
   }
 
   scene.add(group);
-  return { group, plots, update(time) { wind.value = time; } };
+  return { group, plots, update() {} };
 }

@@ -1,5 +1,5 @@
 import { box, cyl, sph, cone, dome, torus, tbox } from './build.js';
-import { addBox, addCircle } from '../systems/collision.js';
+import { addBox, addCircle, addOBB } from '../systems/collision.js';
 
 // Everyday village objects. Each function draws into a Builder at (x, z) turned by ry
 // and registers its own obstacle where one is needed.
@@ -7,9 +7,14 @@ import { addBox, addCircle } from '../systems/collision.js';
 const WOOD = '#7a5230', DARKWOOD = '#4e3520', IRON = '#3f4a46', CLAY = '#b5673c', STEEL = '#b9bdc0';
 
 export function solidBox(b, hw, hd, cx = 0, cz = 0) {
-  const [x0, z0] = b.point(cx - hw, cz - hd);
-  const [x1, z1] = b.point(cx + hw, cz + hd);
-  addBox(x0, z0, x1, z1);
+  const [px, pz] = b.point(cx, cz), [ax, az] = b.point(cx + 1, cz), [bx, bz] = b.point(cx, cz + 1);
+  const ux = ax - px, uz = az - pz;
+  // square to the map: a plain box; turned at some odd angle: a turned box
+  if (Math.abs(ux * uz) < 1e-6) {
+    const [x0, z0] = b.point(cx - hw, cz - hd);
+    const [x1, z1] = b.point(cx + hw, cz + hd);
+    addBox(x0, z0, x1, z1);
+  } else addOBB(px, pz, ux, uz, bx - px, bz - pz, hw, hd);
 }
 export function solidCircle(b, r, cx = 0, cz = 0) {
   const [x, z] = b.point(cx, cz);
@@ -117,19 +122,27 @@ export function dungCakes(b, x, y, z, ry, cols, rows) {
 }
 
 // Plastered beehive store of dung cakes kept for fuel.
+// Bhoonga: a store of dried dung cakes, plastered over with mud against the rain. The plaster
+// slumps and cracks; a few cakes stick out at the bottom where someone has been taking them.
 export function dungStore(b, x, z, s = 1) {
-  b.push(x, 0, z);
-  b.add(cyl(0.55 * s, 1.15 * s, 1.5 * s, '#a88b5a', 9, { y: 0.75 * s }));
-  b.add(dome(0.56 * s, '#b0935f', { y: 1.5 * s, sy: 0.7 }, 9, 3));
+  b.push(x, 0, z, x * 0.37);
+  b.add(cyl(0.6 * s, 1.15 * s, 1.5 * s, '#d8c8a8', 14, { y: 0.75 * s, rz: 0.03 }), 'mud');
+  b.add(dome(0.62 * s, '#d0bf9c', { y: 1.48 * s, sy: 0.75, x: 0.03 }, 14, 4), 'mud');
+  b.add(cyl(0.08 * s, 0.14 * s, 0.25 * s, '#b09668', 6, { y: 1.98 * s }));
+  for (let i = 0; i < 7; i++) {
+    const a = 0.4 + i * 0.32;
+    b.add(cyl(0.13 * s, 0.13 * s, 0.035, '#5a4630', 8, { x: Math.cos(a) * 1.1 * s, y: 0.12 + (i % 3) * 0.1, z: Math.sin(a) * 1.1 * s, rx: Math.PI / 2, ry: -a + Math.PI / 2 }));
+  }
   solidCircle(b, 1.1 * s);
   b.pop();
 }
-
-// Straw stack with a rounded cap.
 export function strawStack(b, x, z, s = 1) {
   b.push(x, 0, z);
-  b.add(cyl(1.7 * s, 1.9 * s, 1.8 * s, '#ffffff', 10, { y: 0.9 * s }), 'straw');
-  b.add(dome(1.75 * s, '#ffffff', { y: 1.8 * s, sy: 0.8 }, 10, 4), 'straw');
+  b.add(cyl(1.7 * s, 1.95 * s, 1.8 * s, '#ffffff', 16, { y: 0.9 * s }), 'straw');
+  b.add(dome(1.75 * s, '#f4eedc', { y: 1.8 * s, sy: 0.8 }, 16, 5), 'straw');
+  // loose straw pulled out round the foot, and a rope tying down the top
+  b.add(cyl(2.15 * s, 2.3 * s, 0.12, '#e8d8a8', 16, { y: 0.06 }), 'straw');
+  b.add(torus(1.55 * s, 0.03, '#6a5a3a', Math.PI * 2, { y: 2.55 * s, rx: Math.PI / 2 }, 4, 16));
   solidCircle(b, 1.8 * s);
   b.pop();
 }
@@ -159,7 +172,7 @@ function wheel(b, r, w, x, y, z, tyre = '#1d1d1d', rim = '#9a9a9a') {
 }
 
 // The red 70cc motorcycle found outside every shop.
-export function motorcycle(b, x, z, ry = 0) {
+export function motorcycle(b, x, z, ry = 0, solid = true) {
   b.push(x, 0, z, ry);
   b.add(torus(0.3, 0.045, '#1d1d1d', Math.PI * 2, { y: 0.3, z: 0.62, ry: Math.PI / 2 }));
   b.add(torus(0.3, 0.045, '#1d1d1d', Math.PI * 2, { y: 0.3, z: -0.6, ry: Math.PI / 2 }));
@@ -173,11 +186,11 @@ export function motorcycle(b, x, z, ry = 0) {
   b.add(box(0.2, 0.03, 0.4, '#c81e1e', { y: 0.63, z: -0.62 }));
   b.add(cyl(0.035, 0.035, 0.6, '#b9bdc0', 5, { x: 0.14, y: 0.3, z: -0.32, rx: Math.PI / 2 }));
   b.add(box(0.02, 0.3, 0.02, '#2a2a2a', { x: -0.14, y: 0.15, z: -0.1, rz: -0.3 }));
-  solidBox(b, 0.3, 0.9);
+  if (solid) solidBox(b, 0.3, 0.9);
   b.pop();
 }
 
-export function bicycle(b, x, z, ry = 0) {
+export function bicycle(b, x, z, ry = 0, solid = true) {
   b.push(x, 0, z, ry);
   for (const wz of [-0.55, 0.55]) b.add(torus(0.34, 0.02, '#1d1d1d', Math.PI * 2, { y: 0.34, z: wz, ry: Math.PI / 2 }));
   b.add(cyl(0.018, 0.018, 0.75, '#1f1f1f', 4, { y: 0.62, rx: Math.PI / 2 - 0.25 }));
@@ -186,7 +199,7 @@ export function bicycle(b, x, z, ry = 0) {
   b.add(box(0.14, 0.05, 0.24, '#4e3520', { y: 0.88, z: -0.3 }));
   b.add(cyl(0.015, 0.015, 0.5, '#9a9a9a', 4, { y: 1.0, z: 0.42, rz: Math.PI / 2 }));
   b.add(box(0.2, 0.02, 0.3, '#3a3a3a', { y: 0.72, z: -0.62 }));
-  solidBox(b, 0.25, 0.85);
+  if (solid) solidBox(b, 0.25, 0.85);
   b.pop();
 }
 
@@ -271,8 +284,20 @@ export function platform(b, x, z, r = 3.2, h = 0.5) {
 }
 
 // Sugarcane bundle or fodder heap: a simple green mound.
-export function fodderHeap(b, x, z, s = 1) {
-  b.add(dome(0.9 * s, '#5a9433', { x, z, sy: 0.6 }, 8, 3));
+// A heap of fresh-cut fodder (berseem or green wheat): a dark core with loose stalks
+// sticking out all over it. sy squashes it, sz stretches it along z, y lifts it.
+let fodderSeed = 1;
+export function fodderHeap(b, x, z, s = 1, { y = 0, sy = 0.6, sz = 1 } = {}) {
+  const r = 0.9 * s;
+  b.add(dome(r * 0.95, '#3f6e26', { x, y, z, sy, sz }, 8, 3));
+  const greens = ['#5a9433', '#4f8a2c', '#6aa43c', '#7ab04a', '#8a9a4a'];
+  for (let i = 0; i < 90; i++) {
+    fodderSeed = (fodderSeed * 16807) % 2147483647;
+    const u = (fodderSeed % 1000) / 1000, v = ((fodderSeed >> 10) % 1000) / 1000, w = ((fodderSeed >> 20) % 1000) / 1000;
+    const a = u * Math.PI * 2, e = Math.acos(1 - v * 0.95);
+    const px = Math.sin(e) * Math.cos(a) * r, py = Math.cos(e) * r * sy, pz = Math.sin(e) * Math.sin(a) * r * sz;
+    b.add(box(0.025, 0.012, 0.35 + w * 0.3, greens[i % greens.length], { x: x + px, y: y + py, z: z + pz, ry: a + w * 2, rx: (w - 0.5) * 1.2, rz: (u - 0.5) * 0.8 }));
+  }
 }
 
 export function coneRoof(b, r, h, color, y) {

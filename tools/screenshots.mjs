@@ -6,7 +6,7 @@ import { mkdirSync } from 'node:fs';
 const URL = process.env.GAME_URL || 'http://localhost:5173/?auto=1';
 const OUT = process.env.SHOT_DIR || 'shots';
 
-// name: [x, z, camera yaw, pitch, distance, hour]
+// name: [x, z, camera yaw, pitch, distance, hour, settings in URL-parameter form]
 const VIEWS = {
   start: [46, 20.5, Math.PI, 0.25, 6.5, 8],
   chowk: [66, 16, Math.PI, 0.3, 9, 10],
@@ -23,6 +23,8 @@ const VIEWS = {
   dusk: [60, 26, Math.PI, 0.3, 8, 18.3],
   night: [90, 166, Math.PI, 0.25, 9, 21],
   dawn: [-52, -40, 0.3, 0.2, 8, 6.4],
+  rain: [60, 26, Math.PI, 0.3, 8, 15, 'weather=rain'],
+  fog: [-110, 20, -1.2, 0.3, 9, 6.8, 'weather=fog'],
 };
 
 const wanted = process.argv.slice(2);
@@ -37,9 +39,13 @@ await page.goto(URL);
 await page.waitForFunction(() => window.__game, null, { timeout: 60000 }).catch(() => {});
 if (errors.length) console.log('ERRORS:\n' + errors.join('\n'));
 
-for (const [name, [x, z, yaw, pitch, dist, hour]] of Object.entries(VIEWS)) {
+for (const [name, [x, z, yaw, pitch, dist, hour, params = '']] of Object.entries(VIEWS)) {
   if (wanted.length && !wanted.includes(name)) continue;
-  await page.evaluate(([x, z, yaw, pitch, dist, hour]) => { window.__game.hour(hour); window.__game.look(x, z, yaw, pitch, dist); }, [x, z, yaw, pitch, dist, hour]);
+  const weather = new URLSearchParams(params).get('weather') || 'clear';
+  await page.evaluate(([x, z, yaw, pitch, dist, hour, weather]) => {
+    const g = window.__game;
+    g.weather.setForce(weather); g.hour(hour); g.look(x, z, yaw, pitch, dist);
+  }, [x, z, yaw, pitch, dist, hour, weather]);
   await page.waitForTimeout(900);
   await page.screenshot({ path: `${OUT}/${name}.jpg`, quality: 80 });
   console.log('saved', name);

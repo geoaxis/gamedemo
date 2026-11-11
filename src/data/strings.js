@@ -157,6 +157,28 @@ export const NPCS = {
       t('اللہ حافظ، پھر ملیں گے۔', 'God keep you. See you again.'),
     ],
   },
+  buzurg: {
+    name: t('بابا جی', 'Old Babaji'),
+    lines: [
+      t('جیتے رہو پتر۔ ہمارے زمانے میں یہ گلیاں کچی ہوتی تھیں۔', 'Bless you, son. In my day these lanes were all mud.'),
+      t('یہ لاٹھی میرے ابا کی ہے، ستر سال سے ساتھ ہے۔', 'This stick was my father’s. It has been with me seventy years.'),
+      t('سردی ابھی گئی نہیں، شام کو چادر لے کر نکلنا۔', 'The cold isn’t gone yet. Take a shawl when you go out in the evening.'),
+    ],
+  },
+  rahiAurat: {
+    name: t('خالہ', 'Auntie'),
+    lines: [
+      t('جیتے رہو بیٹا۔ راستہ دو، سر پر بوجھ ہے۔', 'Bless you, child. Make way, I’ve a load on my head.'),
+      t('بھینسوں کا چارا لے کر جا رہی ہوں۔', 'I’m taking fodder home for the buffaloes.'),
+    ],
+  },
+  bachaa: {
+    name: t('سکول والا بچہ', 'Schoolboy'),
+    lines: [
+      t('السلام علیکم بھائی جان! ماسٹر جی آج چھٹی پر ہیں!', 'Peace be upon you, big brother! Master-ji is off today!'),
+      t('مجھے پہاڑے یاد ہیں، سنو گے؟ دو دونی چار!', 'I know my times tables, want to hear? Two twos are four!'),
+    ],
+  },
   ustad: {
     name: t('استاد پنکچر والا', 'Ustad the Tyre Man'),
     lines: [

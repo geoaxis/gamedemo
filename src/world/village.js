@@ -7,6 +7,8 @@ import { addTree, banyan } from './trees.js';
 import * as P from '../models/props.js';
 import { crow } from '../models/animals.js';
 import { makeRng } from '../util/rng.js';
+import { laneCentre } from './paths.js';
+import { windify } from '../systems/wind.js';
 
 // The village: walled family compounds of mud and brick, the mosque, the square under the
 // banyan, and the bits and pieces of daily life around them.
@@ -15,9 +17,56 @@ const FACE = { s: 0, n: Math.PI, e: Math.PI / 2, w: -Math.PI / 2 };
 const PASTEL = ['#cfe0d0', '#d6e2ee', '#f0e2c0', '#e8d6d0'];
 const GATE = ['#2f6fb0', '#2f7a4f', '#7a2f2f', '#3a3a3a'];
 
+// The top of a boundary wall after a few monsoons: mud walls slump and wash into lumps,
+// brick copings lose pieces and a loose brick or two gets left lying on top.
+const wear = makeRng(606);
+function wornTop(b, cx, cz, lx, lz, h, mud, cap) {
+  const alongX = lx >= lz, len = alongX ? lx : lz, thick = alongX ? lz : lx;
+  let t = -len / 2;
+  while (t < len / 2) {
+    const seg = Math.min(len / 2 - t, wear.range(0.5, 1.4));
+    const mid = t + seg / 2;
+    const x = cx + (alongX ? mid : 0), z = cz + (alongX ? 0 : mid);
+    const L = alongX ? seg + 0.02 : thick + 0.08, D = alongX ? thick + 0.08 : seg + 0.02;
+    if (mud) {
+      const broken = wear.chance(0.07);
+      const ch = broken ? 0.04 : wear.range(0.06, 0.2);
+      b.add(box(L * wear.range(0.96, 1.02), ch, D * wear.range(0.85, 1.05), cap, { x, y: h + ch / 2 - (broken ? 0.22 : 0), z, ry: wear.range(-0.02, 0.02) }));
+      if (broken) b.add(box(L, 0.24, D * 0.95, '#a58554', { x, y: h - 0.1, z }));
+      else if (wear.chance(0.3)) b.add(dome(Math.min(L, D) * 0.45, cap, { x: x + wear.range(-0.2, 0.2), y: h + ch - 0.02, z, sy: 0.35 }, 6, 2));
+    } else if (!wear.chance(0.1)) {
+      b.add(box(L, 0.1, D, cap, { x, y: h + 0.05, z }));
+      if (wear.chance(0.06)) b.add(box(0.23, 0.075, 0.11, '#9c5a3c', { x: x + wear.range(-0.2, 0.2), y: h + 0.14, z, ry: wear.range(0, 3) }));
+    }
+    t += seg;
+  }
+}
+
+// Where a compound really stands. Nobody laid the village out with a string line: each
+// compound follows the bend of the lane its gate opens on, sits a little further back or
+// forward than its neighbours, and is a degree or two off square.
+const LANE_OF = { s: ['main', 20, 'back', -20], n: ['main', 20, 'back', -20], e: ['link', 60, 'east', 122], w: ['link', 60, 'east', 122] };
+export function compoundFrame(c) {
+  const r = makeRng(c.id.charCodeAt(0) * 131 + c.id.length * 7);
+  const across = c.face === 's' || c.face === 'n'; // gate on a north or south side: an east-west lane
+  const sign = c.face === 's' || c.face === 'e' ? 1 : -1; // the front is toward +z / +x
+  const front = (across ? c.z : c.x) + sign * c.d / 2;
+  const [l1, b1, l2, b2] = LANE_OF[c.face];
+  const [lane, base] = Math.abs(front - b1) < Math.abs(front - b2) ? [l1, b1] : [l2, b2];
+  const along = across ? c.x : c.z;
+  const shift = laneCentre(lane, along) - base;
+  const slope = (laneCentre(lane, along + 5) - laneCentre(lane, along - 5)) / 10;
+  const back = r.range(-0.3, 0.8); // setback from the usual building line
+  const turn = (across ? -Math.atan(slope) : Math.atan(slope)) + r.range(-0.025, 0.025);
+  const x = c.x + (across ? 0 : shift - sign * back), z = c.z + (across ? shift - sign * back : 0);
+  return { x, z, ry: FACE[c.face] + turn, hw: c.w / 2, hd: c.d / 2, face: c.face };
+}
+
 function compound(b, c, rng, out) {
-  const ry = FACE[c.face];
-  b.push(c.x, 0, c.z, ry);
+  const f = compoundFrame(c);
+  const ry = f.ry;
+  b.push(f.x, 0, f.z, ry);
+  out.compounds.push({ id: c.id, ...f });
   const mud = c.wall === 'mud';
   const tex = mud ? 'mud' : 'brick', tile = mud ? 2.5 : 1;
   const hw = c.w / 2, hd = c.d / 2, T = 0.4, WH = mud ? 1.9 : 2.1;
@@ -25,12 +74,14 @@ function compound(b, c, rng, out) {
 
   const wall = (cx, cz, lx, lz, h = WH) => {
     b.add(tbox(lx, h, lz, tile, { x: cx, y: h / 2, z: cz }), tex);
-    b.add(box(lx + 0.08, 0.1, lz + 0.08, cap, { x: cx, y: h + 0.05, z: cz }));
+    wornTop(b, cx, cz, lx, lz, h, mud, cap);
     P.solidBox(b, lx / 2, lz / 2, cx, cz);
   };
 
   // boundary wall with a gate in the front
   const gx = (rng.chance(0.5) ? 1 : -1) * c.w * 0.24, GW = 2.9;
+  const [gwx, gwz] = b.point(gx, hd);
+  out.gates.push({ x: gwx, z: gwz, ry });
   wall(0, -hd + T / 2, c.w, T);
   wall(-hw + T / 2, 0, T, c.d - T * 2);
   wall(hw - T / 2, 0, T, c.d - T * 2);
@@ -53,6 +104,8 @@ function compound(b, c, rng, out) {
   b.add(tbox(rw, rh, rd, mud ? 2.5 : 3, { x: rx, y: rh / 2, z: rz }, wallCol), mud ? 'mud' : 'plaster');
   b.add(box(rw + 0.5, 0.22, rd + 0.5, mud ? '#a88a5a' : '#b9b4a8', { x: rx, y: rh + 0.11, z: rz }));
   P.solidBox(b, rw / 2, rd / 2, rx, rz);
+  const [rfx, rfz] = b.point(rx, rz);
+  out.roofs.push({ x: rfx, z: rfz, y: rh + 0.22, ry, id: c.id });
   const fz = rz + rd / 2;
   if (mud) {
     for (let i = 0; i < Math.floor(rw / 0.7); i++) b.add(box(0.12, 0.12, 0.5, '#4e3520', { x: rx - rw / 2 + 0.4 + i * 0.7, y: rh - 0.18, z: fz + 0.1 }));
@@ -75,6 +128,12 @@ function compound(b, c, rng, out) {
     b.add(box(1.16, 0.1, 0.1, '#3a2a1c', { x: rx + dx, y: 2.06, z: fz + 0.04 }));
   }
   b.add(box(0.9, 0.8, 0.08, '#3d5a4c', { x: rx, y: 1.7, z: fz + 0.03 }));
+  {
+    const [wx, wz] = b.point(rx, fz + 0.09), [bx, bz] = b.point(rx + rw * 0.15, fz + 2.6 - 0.4);
+    out.windows.push({ x: wx, z: wz, y: 1.7, ry, w: 0.8, h: 0.7 });
+    for (const dx of [-rw * 0.27, rw * 0.27]) { const [dx2, dz2] = b.point(rx + dx, fz + 0.09); out.windows.push({ x: dx2, z: dz2, y: 1.0, ry, w: 0.12, h: 1.9, crack: true }); }
+    out.bulbs.push({ x: bx, z: bz, y: 2.55 });
+  }
   b.add(box(0.04, 0.8, 0.1, '#2a2a2a', { x: rx, y: 1.7, z: fz + 0.04 }));
   // veranda
   const vd = 2.6;
@@ -95,6 +154,7 @@ function compound(b, c, rng, out) {
     b.add(box(0.85, 1.8, 0.08, '#4e3520', { x: kx, y: 0.9, z: kz + 1.93 }));
     P.solidBox(b, kw / 2, 1.9, kx, kz);
     P.chulha(b, kx + side * 0.3, kz + 3.3, 0);
+    out.chulhas.push(b.point(kx + side * 0.3, kz + 3.3));
     for (let i = 0; i < 3; i++) b.add(cyl(0.16 - i * 0.02, 0.14 - i * 0.02, 0.2, '#b9bdc0', 8, { x: kx - side * 0.9, y: 0.1 + i * 0.2, z: kz + 2.6 }));
   }
 
@@ -130,8 +190,10 @@ function compound(b, c, rng, out) {
     const lz = cz0 + 4.6, lx = rx;
     for (const s of [-1, 1]) b.add(cyl(0.03, 0.03, 1.9, '#4e3520', 4, { x: lx + s * 2, y: 0.95, z: lz }));
     b.add(box(4, 0.012, 0.012, '#2a2a2a', { x: lx, y: 1.85, z: lz }));
+    // the washing is built separately so it can flap
     ['#c9463d', '#e9e4d6', '#2f8a7a', '#e2b84a', '#5a4a8a'].forEach((col, i) => {
-      b.add(box(0.5, 0.6 + (i % 2) * 0.25, 0.02, col, { x: lx - 1.5 + i * 0.75, y: 1.52 - (i % 2) * 0.12, z: lz }));
+      const h = 0.6 + (i % 2) * 0.25, [wx, wz] = b.point(lx - 1.5 + i * 0.75, lz);
+      out.washing.add(box(0.5, h, 0.02, col, { x: wx, y: 1.84 - h / 2, z: wz, ry }));
     });
   }
 
@@ -225,6 +287,7 @@ function mosque(b, scene, out) {
 
   const [sx, sz] = b.point(0, hd - T / 2 + 0.27);
   const [ix, iz] = b.point(2.6, hd + 1.4);
+  out.mosqueGate = b.point(0, hd - 0.6);
   const [lx, lz] = b.point(0, 4);
   b.pop();
 
@@ -239,7 +302,7 @@ function mosque(b, scene, out) {
 export function buildVillage(scene) {
   const rng = makeRng(47);
   const b = new Builder();
-  const out = { animals: [], charpais: [], pumps: [], signSpots: {}, hens: [], crows: [], lights: [], poles: [] };
+  const out = { animals: [], charpais: [], pumps: [], signSpots: {}, hens: [], crows: [], lights: [], poles: [], gates: [], compounds: [], washing: new Builder(), roofs: [], chulhas: [], windows: [], bulbs: [] };
 
   for (const c of COMPOUNDS) compound(b, c, rng, out);
   mosque(b, scene, out);
@@ -262,26 +325,36 @@ export function buildVillage(scene) {
   out.lights.push({ x: 62, y: 3.2, z: 9, color: 0xffd9a0 });
 
   // cricket in the back lane: three bricks for a wicket
-  for (let i = 0; i < 3; i++) b.add(box(0.11, 0.23, 0.08, '#9c5a3c', { x: 34.6, y: 0.115, z: -20.25 + i * 0.25 }));
-  b.add(sph(0.045, '#c8e03a', { x: 38.5, y: 0.05, z: -19.2 }));
+  const pitch = laneCentre('back', 36.5);
+  for (let i = 0; i < 3; i++) b.add(box(0.11, 0.23, 0.08, '#9c5a3c', { x: 34.6, y: 0.115, z: pitch - 0.25 + i * 0.25 }));
+  b.add(sph(0.045, '#c8e03a', { x: 38.5, y: 0.05, z: pitch + 0.8 }));
 
   // odds and ends at the edges of the village
-  P.strawStack(b, -12, -8, 1.0);
+  P.strawStack(b, -14.5, -8, 1.0);
   P.strawStack(b, 131, -34, 1.15);
   P.strawStack(b, 96, 60, 0.9);
   P.dungStore(b, -11, 44, 1);
   P.dungStore(b, 112, 62, 1.1);
   P.dungStore(b, 114.5, 64.5, 0.8);
   P.donkeyCart(b, 128, 58, 0.4);
-  P.bicycle(b, 49.6, 22.9, 1.45);
+  P.bicycle(b, 49.6, laneCentre('main', 49.6) + 2.9, 1.45);
 
   // electricity poles along the main street and the lane to the road
   const street = [];
-  for (const x of [-22, 6, 34, 64.5, 92, 118, 148]) { P.pole(b, x, 23.0, 0); street.push([x, 23.0]); }
+  // no two poles stand quite straight; the wires hang from wherever the tops ended up
+  const leanPole = (x, z, ry) => {
+    const lx = wear.range(-0.045, 0.045), lz = wear.range(-0.045, 0.045);
+    b.push(x, 0, z, 0);
+    b.stack[b.stack.length - 1].multiply(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(lz, 0, -lx)));
+    P.pole(b, 0, 0, ry);
+    b.pop();
+    return [x + lx * 7.2, z + lz * 7.2];
+  };
+  for (const x of [-22, 6, 34, 64.5, 92, 118, 148]) street.push(leanPole(x, laneCentre('main', x) + 3.0, 0));
   const lane = [];
-  for (const z of [50, 78, 106, 134, 160]) { P.pole(b, 63.6, z, Math.PI / 2); lane.push([63.6, z]); }
+  for (const z of [50, 78, 106, 134, 160]) lane.push(leanPole(laneCentre('link', z) + 3.6, z, Math.PI / 2));
   out.poles.push({ pts: street, along: 'x' }, { pts: lane, along: 'z' });
-  for (const [px, pz] of [[34, 23], [92, 23], [63.6, 78]]) crow(b, px + 0.4, 7.14, pz, 1);
+  for (const [px, pz] of [street[2], street[4], lane[1]]) crow(b, px + 0.4, 7.14, pz, 1);
 
   for (const c of out.crows) crow(b, c.x, c.y, c.z, rng() * 6);
 
@@ -297,6 +370,9 @@ export function buildVillage(scene) {
   b.pop();
 
   scene.add(b.build());
+  const washing = new THREE.Mesh(out.washing.geometry(), windify(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide }), { height: 1.84, base: 1.0, amt: 0.35, flutter: 0.05, hang: true }));
+  washing.castShadow = washing.receiveShadow = true;
+  scene.add(washing);
 
   // ---- wall chalking and painted notices ----
   const chalk = (id, text, opts) => {

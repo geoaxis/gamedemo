@@ -3,8 +3,8 @@ import { Builder, box, cyl, sph, cone, dome, registerTexture } from './build.js'
 import { signBoard, truckArt } from '../ui/signs.js';
 import { SIGNS } from '../data/strings.js';
 import { makeHuman } from './human.js';
-import { ROAD } from '../data/layout.js';
 import { heightAt } from '../world/terrain.js';
+import { roadZ, roadSlope } from '../world/paths.js';
 import { addDynamic } from '../systems/collision.js';
 
 // Traffic on the paved road: a decorated Bedford truck and a motorcycle rickshaw.
@@ -132,10 +132,9 @@ export class Traffic {
   constructor(scene) {
     this.items = [];
     const add = (v, dir, x, wait) => {
-      const z = ROAD.z - dir * 1.75;
+      const z = roadZ(x) - dir * 1.75;
       const item = { ...v, dir, x, z, v: v.speed, wait, honk: 0, body: [addDynamic({ x, z, r: 1.3 }), addDynamic({ x, z, r: 1.3 })] };
       item.group.rotation.order = 'YXZ';
-      item.group.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
       scene.add(item.group);
       this.items.push(item);
       return item;
@@ -161,6 +160,10 @@ export class Traffic {
       it.v += Math.sign(target - it.v) * Math.min(Math.abs(target - it.v), dt * (target < it.v ? 14 : 3));
       it.x += it.dir * it.v * dt;
       if (Math.abs(it.x) > 420) it.wait = 6 + Math.random() * 18;
+      // keep to the left-hand lane as the road bends
+      const sl = roadSlope(it.x);
+      it.z = roadZ(it.x) - it.dir * 1.75 / Math.cos(Math.atan(sl));
+      it.group.rotation.y = Math.atan2(it.dir, it.dir * sl);
 
       const half = it.length / 2 - 0.6;
       const yf = heightAt(it.x + it.dir * half, it.z), yb = heightAt(it.x - it.dir * half, it.z);

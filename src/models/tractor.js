@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { Builder, box, cyl, sph, torus, dome, registerTexture } from './build.js';
+import { Builder, box, cyl, sph, torus, registerTexture } from './build.js';
+import * as P from './props.js';
 import { signBoard, truckArt } from '../ui/signs.js';
 import { SIGNS } from '../data/strings.js';
 
@@ -122,8 +123,8 @@ export function makeTrolley() {
   b.add(box(1.95, 0.62, 0.07, BLUE, { y: 1.28, z: -5.04 }));
   b.add(box(1.7, 0.1, 0.1, '#3a3a3a', { y: 0.5, z: -3.5 }));
   // a load of cut fodder
-  b.add(dome(0.95, '#5a9433', { y: 1.0, z: -2.5, sy: 0.75, sz: 1.3 }, 8, 3));
-  b.add(dome(0.9, '#4f8a2c', { y: 1.0, z: -3.9, sy: 0.7, sz: 1.2 }, 8, 3));
+  P.fodderHeap(b, 0, -2.5, 1.05, { y: 1.0, sy: 0.72, sz: 1.3 });
+  P.fodderHeap(b, 0, -3.9, 1.0, { y: 1.0, sy: 0.68, sz: 1.2 });
   for (const s of [-1, 1]) for (const z of [-4.7, -5.0]) b.add(sph(0.05, '#d81e2c', { x: s * (z < -4.8 ? 0.8 : 0.6), y: 1.05, z: -5.09 }), 'glow');
   group.add(b.build());
 

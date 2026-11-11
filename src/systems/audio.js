@@ -106,6 +106,7 @@ export class Sound {
     this.wind = this.loop(this.noise, { filter: 'lowpass', freq: 320, vol: 0.1 });
     this.crickets = this.loop(this.makeCrickets(), { vol: 0.22 });
     this.rustle = this.loop(this.noise, { filter: 'highpass', freq: 3200, vol: 0.05 });
+    this.rain = this.loop(this.noise, { filter: 'bandpass', freq: 2400, q: 0.4, vol: 0.32 });
   }
 
   // Volume and pan for a point in the world, as heard from the camera.
@@ -224,10 +225,12 @@ export class Sound {
     this.setLoop(this.rickshaw, 1, s.rickshaw.x, s.rickshaw.z);
     this.rickshaw.src.playbackRate.setTargetAtTime(0.7 + s.rickshaw.v * 0.06, this.ctx.currentTime, 0.2);
     this.setLoop(this.canal, 1, s.canalX, s.cam.z);
-    const gust = 0.6 + 0.4 * Math.sin(this.ctx.currentTime * 0.23) * Math.sin(this.ctx.currentTime * 0.071);
+    // the breeze you hear is the breeze you see bending the grass
+    const gust = 0.2 + s.wind * 0.9;
     this.setLoop(this.wind, gust);
     this.setLoop(this.rustle, gust * s.inFields);
-    this.setLoop(this.crickets, s.night);
+    this.setLoop(this.crickets, s.night * (1 - (s.rain || 0)));
+    this.setLoop(this.rain, s.rain || 0);
 
     // Now and then, something nearby calls out.
     this.timer -= dt;

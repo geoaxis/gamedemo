@@ -26,6 +26,21 @@ export function addBox(x0, z0, x1, z1) {
 }
 export const addBoxC = (cx, cz, hw, hd) => addBox(cx - hw, cz - hd, cx + hw, cz + hd);
 
+// A box turned to any angle: centre (cx, cz), unit axes u and v (in x, z), half sizes hu, hv.
+export function addOBB(cx, cz, ux, uz, vx, vz, hu, hv) {
+  const c = { box: true, obb: true, cx, cz, ux, uz, vx, vz, hu, hv };
+  const ex = Math.abs(ux) * hu + Math.abs(vx) * hv, ez = Math.abs(uz) * hu + Math.abs(vz) * hv;
+  c.x0 = cx - ex; c.x1 = cx + ex; c.z0 = cz - ez; c.z1 = cz + ez;
+  insert(c, c.x0, c.z0, c.x1, c.z1);
+  return c;
+}
+
+// Point (x, z) in a turned box's own frame, as an axis-aligned box centred on 0.
+function toLocal(c, x, z) {
+  const dx = x - c.cx, dz = z - c.cz;
+  return [dx * c.ux + dz * c.uz, dx * c.vx + dz * c.vz];
+}
+
 export function addCircle(x, z, r) {
   const c = { box: false, x, z, r };
   insert(c, x - r, z - r, x + r, z + r);
@@ -48,6 +63,14 @@ function pushFromCircle(p, r, cx, cz, cr) {
 }
 
 function pushFromBox(p, r, b) {
+  if (b.obb) {
+    const [lx, lz] = toLocal(b, p.x, p.z);
+    const q = { x: lx, z: lz };
+    if (!pushFromBox(q, r, { x0: -b.hu, x1: b.hu, z0: -b.hv, z1: b.hv })) return false;
+    p.x = b.cx + q.x * b.ux + q.z * b.vx;
+    p.z = b.cz + q.x * b.uz + q.z * b.vz;
+    return true;
+  }
   const nx = Math.max(b.x0, Math.min(p.x, b.x1));
   const nz = Math.max(b.z0, Math.min(p.z, b.z1));
   const dx = p.x - nx, dz = p.z - nz;
@@ -108,7 +131,11 @@ export function insideBox(x, z, pad = 0.25) {
   const list = grid.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
   if (!list) return false;
   for (const c of list) {
-    if (c.box && x > c.x0 - pad && x < c.x1 + pad && z > c.z0 - pad && z < c.z1 + pad) return true;
+    if (!c.box) continue;
+    if (c.obb) {
+      const [lx, lz] = toLocal(c, x, z);
+      if (Math.abs(lx) < c.hu + pad && Math.abs(lz) < c.hv + pad) return true;
+    } else if (x > c.x0 - pad && x < c.x1 + pad && z > c.z0 - pad && z < c.z1 + pad) return true;
   }
   return false;
 }

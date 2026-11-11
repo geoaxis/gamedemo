@@ -15,9 +15,14 @@ export class FollowCam {
     this.idle = 0;
     this.target = new THREE.Vector3();
     this.ready = false;
+    this.baseFov = camera.fov;
+    this.kick = 0;
+    this.shoulder = 0;
+    this.time = 0;
   }
 
-  update(dt, input, focus, { driving = false, driveYaw = 0 } = {}) {
+  update(dt, input, focus, { driving = false, driveYaw = 0, speed = 0 } = {}) {
+    this.time += dt;
     if (input.dx || input.dy) this.idle = 0; else this.idle += dt;
     this.yaw -= input.dx * 0.0032;
     this.pitch = clamp(this.pitch + input.dy * 0.0026, -0.12, 1.25);
@@ -45,9 +50,24 @@ export class FollowCam {
     this.reach = this.reach === undefined || reach < this.reach ? reach : this.reach + (reach - this.reach) * Math.min(1, dt * 4);
 
     const cam = this.camera;
-    cam.position.set(this.target.x + ox * this.reach, this.target.y + sp * this.reach, this.target.z + oz * this.reach);
+    // over the right shoulder on foot, centred behind the tractor
+    this.shoulder += ((driving ? 0 : 0.42 * Math.min(1, this.reach / 4)) - this.shoulder) * Math.min(1, dt * 3);
+    let rx = -Math.cos(this.yaw) * this.shoulder, rz = Math.sin(this.yaw) * this.shoulder;
+    // the shoulder offset must not put the camera inside a wall in a narrow lane
+    if (insideBox(this.target.x + ox * this.reach + rx, this.target.z + oz * this.reach + rz, 0.15)) {
+      this.shoulder *= 0.5; rx *= 0.3; rz *= 0.3;
+    }
+    // a faint drift, as if the camera were held
+    const sway = 0.025 + Math.min(1, speed / 6) * 0.03;
+    const hx = Math.sin(this.time * 0.9) * sway, hy = Math.sin(this.time * 1.3 + 1) * sway * 0.6;
+    cam.position.set(this.target.x + ox * this.reach + rx, this.target.y + sp * this.reach + hy, this.target.z + oz * this.reach + rz);
     const floor = heightAt(cam.position.x, cam.position.z) + 0.35;
     if (cam.position.y < floor) cam.position.y = floor;
-    cam.lookAt(this.target);
+    cam.lookAt(this.target.x + rx + hx * 0.3, this.target.y, this.target.z + rz);
+    // widen the view a touch when running or driving fast
+    const kick = clamp((speed - 3.2) / 3, 0, 1) * 6;
+    this.kick += (kick - this.kick) * Math.min(1, dt * 2.5);
+    const fov = this.baseFov + this.kick;
+    if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
   }
 }

@@ -8,24 +8,36 @@ import { AREA_NAMES, PROMPTS, TOASTS, CLOCK, petToast } from './data/strings.js'
 import { loadUrduFont } from './ui/signs.js';
 import { Hud } from './ui/hud.js';
 import { Builder } from './models/build.js';
-import { buildTerrain } from './world/terrain.js';
+import { buildTerrain, surfaceAt, heightAt } from './world/terrain.js';
 import { buildCanal } from './world/canal.js';
 import { buildFields } from './world/fields.js';
 import { buildVillage } from './world/village.js';
 import { buildShops } from './world/shops.js';
 import { buildTubewell } from './world/tubewell.js';
-import { scatterTrees, buildTrees } from './world/trees.js';
+import { scatterTrees, buildTrees, treeSpots } from './world/trees.js';
+import { buildVegetation, updateDetail } from './world/vegetation.js';
+import { laneCentre } from './world/paths.js';
+import { buildClutter } from './world/clutter.js';
+import { buildAmbient } from './world/ambient.js';
+import { buildSkyLife } from './world/skylife.js';
+import { buildNightLights } from './world/nightlights.js';
 import { buildSky } from './world/sky.js';
-import { spawnAnimal, updateAnimals, animals, egret } from './models/animals.js';
+import { spawnAnimal, updateAnimals, animals, egret, setShelters } from './models/animals.js';
 import { Traffic } from './models/truck.js';
 import { Input, isTouch } from './systems/input.js';
 import { Player } from './systems/player.js';
 import { FollowCam } from './systems/camera.js';
 import { Tractor } from './systems/vehicle.js';
+import { buildRiders } from './systems/riders.js';
 import { Villager } from './systems/npc.js';
 import { Interactions } from './systems/interact.js';
 import { Sound } from './systems/audio.js';
 import { makeRng } from './util/rng.js';
+import { blocked } from './systems/collision.js';
+import { PATHS } from './world/paths.js';
+import { wind } from './systems/wind.js';
+import { makePost } from './systems/post.js';
+import { makeWeather } from './systems/weather.js';
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById('game');
@@ -36,10 +48,13 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, 1, 0.3, 3200);
+const post = makePost(renderer, scene, camera, { full: !isTouch && !params.has('nopost') });
 const resize = () => {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
+  post.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.fov = camera.aspect < 1 ? 72 : 58; // a phone held upright needs a taller view
+  if (window.__cam) window.__cam.baseFov = camera.fov;
   camera.updateProjectionMatrix();
 };
 window.addEventListener('resize', resize);
@@ -62,9 +77,17 @@ async function boot() {
   const shops = buildShops(scene);
   const tubewell = buildTubewell(scene);
   scatterTrees();
+  buildVegetation(scene, { plots: fields.plots, gates: village.gates, compounds: village.compounds, thin: isTouch ? 0.5 : 1 });
+  const clutter = buildClutter(scene, { plots: fields.plots, gates: village.gates, pumps: [...village.pumps, village.chowkPump], compounds: village.compounds, far: isTouch ? 40 : 70 });
   buildTrees(scene);
+  const ambient = buildAmbient(scene, { dumps: clutter.dumps, chulhas: village.chulhas, renderer });
+  const skyLife = buildSkyLife(scene, { roofs: village.roofs });
+  const nightLights = buildNightLights(scene, { windows: village.windows, bulbs: village.bulbs, extra: [...shops.lights, ...village.lights] });
   const sky = buildSky(scene, [...shops.lights, ...village.lights]);
   if (params.has('hour')) sky.hours = parseFloat(params.get('hour'));
+  const weather = makeWeather(scene, { force: params.get('weather') });
+  sky.weather = weather;
+  weather.ground = heightAt;
 
   // ---- animals ----
   for (const a of village.animals) spawnAnimal(scene, a.kind, a.x, a.z, { yaw: a.yaw, variant: a.variant, tether: true, graze: true });
@@ -106,22 +129,65 @@ async function boot() {
     P('musafir', 'musafir', shops.musafir),
     P('ammi', 'ammi', village.ammi),
     P('ustad', 'ustad', shops.ustad),
-    P('kids', 'kid1', { x: 35.3, z: -20, yaw: Math.PI / 2 }),
-    P('kids', 'kid2', { x: 43.5, z: -20.2, yaw: -Math.PI / 2 }),
-    P('kids', 'kid3', { x: 39.6, z: -18.4, yaw: 2.6 }),
-    P('rahi', { kameez: '#c9c2b0', headwear: 'topi', beard: 'full', waistcoat: '#4a3a2a' }, { x: 8, z: 20.9 }, { path: [[4, 20.9], [112, 20.9]] }),
-    P('rahi', { kameez: '#7a8a6a', headwear: 'pagri', headColor: '#e9e4d6', shoulderCloth: '#c9463d' }, { x: 61, z: 60 }, { path: [[61, 30], [61, 150]] }),
+    // cricket in the back lane, wherever it bends
+    P('kids', 'kid1', { x: 35.3, z: laneCentre('back', 35.3), yaw: Math.PI / 2 }),
+    P('kids', 'kid2', { x: 43.5, z: laneCentre('back', 43.5) - 0.2, yaw: -Math.PI / 2 }),
+    P('kids', 'kid3', { x: 39.6, z: laneCentre('back', 39.6) + 1.6, yaw: 2.6 }),
+    // people out on the lanes: { lane, from, to } in metres along the lane's centre line
+    P('rahi', 'rahiMilk', { x: 20, z: 20 }, { path: { lane: 'main', from: 80, to: 200 } }),
+    P('rahi', 'rahiFarmer', { x: 61, z: 60 }, { path: { lane: 'link', from: 6, to: 140 } }),
+    P('buzurg', 'rahiElder', { x: 70, z: 20 }, { path: { lane: 'main', from: 120, to: 175 }, offset: 1.2 }),
+    P('rahiAurat', 'rahiWoman', { x: 100, z: 20 }, { path: { lane: 'main', from: 150, to: 240 }, offset: 0.9 }),
+    P('rahi', 'rahiYoung', { x: 60, z: 110 }, { path: { lane: 'link', from: 30, to: 144 }, offset: 1.1 }),
+    P('bachaa', 'rahiBoy', { x: 40, z: -20 }, { path: { lane: 'back', from: 8, to: 120 }, offset: 0.8 }),
+    P('rahiAurat', 'rahiWoman2', { x: 122, z: 0 }, { path: { lane: 'east', from: 6, to: 100 }, offset: 0.9 }),
   ];
 
+  // ---- where everyone goes when it rains ----
+  {
+    setShelters([
+      ...village.bulbs.map((b) => ({ x: b.x, z: b.z - 0.6, r: 1.6, roof: true })),
+      ...shops.lights.map((l) => ({ x: l.x, z: l.z + 1.5, r: 1.5, roof: true })),
+      { x: CHOWK.x, z: CHOWK.z, r: 7 },
+      ...treeSpots(['sheesham', 'mango', 'kikar', 'kinnow']).map((t) => ({ x: t.x, z: t.z, r: 1.8 * t.s })),
+    ]);
+    const near = (list, x, z) => list.reduce((best, p) => ((p.x - x) ** 2 + (p.z - z) ** 2 < (best.x - x) ** 2 + (best.z - z) ** 2 ? p : best));
+    const trees = treeSpots(['sheesham', 'mango', 'kinnow', 'kikar']);
+    for (const v of people) {
+      if (v.seated) continue;
+      if (v.route || v.id === 'kids') {
+        // duck into the nearest gateway
+        const g = near(village.gates, v.x, v.z);
+        v.shelter = { x: g.x, z: g.z, hide: true };
+      } else if (v.id === 'nasreen') {
+        v.shelter = { x: CHOWK.x - 2.7, z: CHOWK.z + 2.7, face: Math.PI * 0.75 }; // under the banyan
+      } else if (v.id === 'imam') {
+        v.shelter = { x: village.mosqueGate[0], z: village.mosqueGate[1], hide: true };
+      } else if (v.id === 'jeeda') {
+        const t = near(trees, v.x, v.z), a = Math.atan2(v.x - t.x, v.z - t.z);
+        v.shelter = { x: t.x + Math.sin(a) * 1.1, z: t.z + Math.cos(a) * 1.1, face: a };
+      } else if (v.id === 'ammi') {
+        const b = near(village.bulbs, v.x, v.z); // the veranda
+        v.shelter = { x: b.x, z: b.z };
+      }
+    }
+  }
+
   // ---- player, tractor, traffic ----
-  const player = new Player(scene, START.x, START.z, START.yaw);
+  const startZ = laneCentre('main', START.x) + START.z - 20; // START is given for a straight street
+  const player = new Player(scene, START.x, startZ, START.yaw);
   const cam = new FollowCam(camera, START.yaw);
+  window.__cam = cam;
   const tractor = new Tractor(scene, CHOWK.x + 12, CHOWK.z + 10, -Math.PI / 2);
   const traffic = new Traffic(scene);
+  const riders = buildRiders(scene);
   traffic.onHonk = (it) => (it === traffic.truck ? sound.truckHorn(it.x, it.z) : sound.rickshawHorn(it.x, it.z));
 
   let lastCanalToast = 0;
-  player.onStep = (surface, running) => sound.step(surface, running);
+  player.onStep = (surface, running) => {
+    sound.step(surface, running);
+    if (surface === 'dirt') ambient.kick(player.x, player.z, running ? 1.4 : 0.8);
+  };
   player.onBlocked = () => {
     if (performance.now() - lastCanalToast > 5000) { lastCanalToast = performance.now(); hud.toast(TOASTS.canalBlock); }
   };
@@ -168,7 +234,7 @@ async function boot() {
   ];
 
   // ---- frame loop ----
-  let areaId = null, started = false, last = performance.now(), time = 0;
+  let areaId = null, started = false, last = performance.now(), time = 0, exhaustT = 0, wellT = 0;
   const focus = { x: 0, y: 0, z: 0 };
   const drive = { throttle: 0, steer: 0 };
 
@@ -187,6 +253,8 @@ async function boot() {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     time += dt;
+    wind.update(dt);
+    wind.pushFrom(player.x, player.z, player.mode === 'drive' ? 2.2 : 0.9);
 
     if (started) {
       if (input.pressed('KeyE')) useKey();
@@ -199,17 +267,45 @@ async function boot() {
     drive.throttle = input.moveZ;
     drive.steer = -input.moveX; // a positive steer angle turns left
     tractor.update(dt, drive);
+    // the diesel stack puffs, black when pulling away
+    if (tractor.driven) {
+      exhaustT -= dt;
+      const accel = Math.abs(drive.throttle);
+      if (exhaustT < 0) {
+        exhaustT = accel ? 0.12 : 0.45;
+        const c = Math.cos(tractor.yaw), sn = Math.sin(tractor.yaw);
+        ambient.puff(tractor.x + 0.2 * c + 0.95 * sn, heightAt(tractor.x, tractor.z) + 2.15, tractor.z - 0.2 * sn + 0.95 * c, accel ? 1.1 : 0.6, accel ? 0x2a2622 : 0x6a6660);
+      }
+    }
+    // and so does the Peter engine at the tube well
+    if (tubewell.level > 0.5) {
+      wellT -= dt;
+      if (wellT < 0) { wellT = 0.5; ambient.puff(tubewell.engine.x, 2.2, tubewell.engine.z, 0.7, 0x5a5650); }
+    }
+    // dust behind the big back wheels on the earth tracks
+    const tsp = Math.abs(tractor.speed);
+    if (tsp > 1.5 && Math.random() < dt * tsp * 1.2 && surfaceAt(tractor.x, tractor.z) === 'dirt') {
+      const side = Math.random() < 0.5 ? -0.8 : 0.8, back = -Math.sign(tractor.speed) * 1.2;
+      ambient.kick(tractor.x + Math.sin(tractor.yaw) * back + Math.cos(tractor.yaw) * side, tractor.z + Math.cos(tractor.yaw) * back - Math.sin(tractor.yaw) * side, 1.8 + tsp * 0.15);
+    }
     player.update(dt, input, cam.yaw);
-    for (const v of people) v.update(dt, player);
-    updateAnimals(dt, player, camera.position);
+    for (const v of people) v.update(dt, player, weather.rain);
+    updateAnimals(dt, player, camera.position, weather.rain);
     traffic.update(dt, [player, tractor]);
+    riders.update(dt, player, (r) => (r.kind === 'bicycle' ? sound.bell(r.x, r.z) : sound.rickshawHorn(r.x, r.z)));
     tubewell.update(dt);
-    canal.update(dt);
+    canal.update(dt, sky);
     fields.update(time);
 
     focus.x = player.x; focus.y = player.y; focus.z = player.z;
-    cam.update(dt, input, focus, { driving: player.mode === 'drive', driveYaw: tractor.yaw });
+    cam.update(dt, input, focus, { driving: player.mode === 'drive', driveYaw: tractor.yaw, speed: player.mode === 'drive' ? Math.abs(tractor.speed) : player.speed });
+    weather.update(dt, camera.position, sky.hours);
     sky.update(dt, focus, camera);
+    updateDetail(camera.position);
+    ambient.update(dt, camera.position, sky, camera);
+    skyLife.update(dt, sky.night, weather.rain);
+    nightLights.update(dt, camera.position, sky);
+    post.update(sky);
     document.body.classList.toggle('driving', player.mode === 'drive');
     tractor.model.lamp.intensity = player.mode === 'drive' ? sky.night * 120 : 0;
 
@@ -228,10 +324,10 @@ async function boot() {
       tubewell: { level: tubewell.level, x: tubewell.engine.x, z: tubewell.engine.z },
       tractor: { x: tractor.x, z: tractor.z, speed: tractor.speed, driven: tractor.driven },
       truck: traffic.truck, rickshaw: traffic.rickshaw,
-      canalX: CANAL.x, inFields: areaId === 'fields' ? 1 : 0.3,
+      canalX: CANAL.x, inFields: areaId === 'fields' ? 1 : 0.3, wind: wind.at(camera.position.x, camera.position.z), rain: weather.rain,
     }, emitters);
 
-    renderer.render(scene, camera);
+    post.render();
     input.endFrame();
   }
 
@@ -247,7 +343,7 @@ async function boot() {
 
   // handy for screenshots and debugging
   window.__game = {
-    player, tractor, cam, sky, tubewell, renderer, traffic, sound,
+    player, tractor, cam, sky, tubewell, renderer, traffic, sound, ambient, weather, riders, people, animals, blocked, PATHS,
     look(x, z, yaw = 0, pitch = 0.3, dist = 6.5) { player.x = x; player.z = z; player.yaw = yaw + Math.PI; cam.yaw = yaw; cam.pitch = pitch; cam.dist = dist; cam.ready = false; },
     hour(h) { sky.hours = h; },
   };

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { getTexture, hasTexture } from './textures.js';
+import { grime } from './grime.js';
 
 // Low-poly modelling kit. Every shape gets a per-vertex colour, and a Builder merges
 // many shapes into one mesh per material so a whole house costs a couple of draw calls.
@@ -15,12 +16,13 @@ export function registerTexture(key, texture) {
 export function getMat(key) {
   if (mats.has(key)) return mats.get(key);
   let m;
-  if (key === 'flat') m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  if (key === 'flat') m = grime(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), 0.5);
   else if (key === 'glow') m = new THREE.MeshBasicMaterial({ vertexColors: true });
   else {
     const map = extraTextures.get(key) || (hasTexture(key) ? getTexture(key) : null);
     if (!map) throw new Error(`Unknown material: ${key}`);
     m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map });
+    if (hasTexture(key)) grime(m, 1);
   }
   mats.set(key, m);
   return m;
